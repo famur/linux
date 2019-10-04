@@ -1,5 +1,8 @@
-#include<isotream>
+#include<iostream>
 #include<queue>
+#include<unistd.h>
+#include<pthread.h>
+
 using namespace std;
 
 class Task{
@@ -8,6 +11,11 @@ class Task{
         int y;
     public:
         Task()
+        {
+            x = 0;
+            y = 0;
+        }
+        Task(int _x, int _y):x(_x), y(_y)
         {
 
         }
@@ -21,31 +29,64 @@ class Task{
         }
 };
 
-class ThreaPool{
+class ThreadPool{
     private:
-        int mun;
+        int num;
         queue<Task> q;
-        thread_mutex_t lock;
-        thread_cond_t cond;
-    pubilc:
-        ThreadPoll()
+        pthread_mutex_t lock;
+        pthread_cond_t cond;
+    public:
+        void LockQueue()
         {
-
+            pthread_mutex_lock(&lock);
         }
-        void *HandlerTask(void *arg)
+        void UnlockQueue()
         {
+            pthread_mutex_lock(&lock);
+        }
+        bool IsQueueEmpty()
+        {
+            return q.size() == 0 ? true : false;
+        }
+        void ThreadWait()
+        {
+            pthread_cond_wait(&cond, &lock);
+        }
+        void PopTask(Task &t)
+        {
+            t = q.front();
+            q.pop();
+        }
+        void PushTask(Task &t)
+        {
+            q.push(t);
+        }
+        void NotifyThread()
+        {
+            pthread_cond_signal(&cond);
+        }
+    public:
+        ThreadPool(int num_ = 6):num(num_)
+        {
+            pthread_mutex_init(&lock, NULL);
+            pthread_cond_init(&cond, NULL);
+        }
+      static void *HandlerTask(void *arg)
+        {
+            pthread_detach(pthread_self());
+            ThreadPool *tp = (ThreadPool*)arg;
             for(;;)
             {
-                LockQueue();
-                if(IsQueueEmpty())
+               tp-> LockQueue();
+                if(tp->IsQueueEmpty())
                 {
-                    ThreadWait();
+                   tp->ThreadWait();
                 }
                 Task t;
-                POPTask(t);
-                UnlockQueue();
+                tp->PopTask(t);
+                tp->UnlockQueue();
                 int result = t.Run();
-                cout << "Thread : " << pthread_self() << ", result : " << result << endl;
+        cout << "Thread : " << pthread_self() << ", result : " << result <<endl;
             }
         }
 
@@ -53,21 +94,37 @@ class ThreaPool{
         {
             int i = 0;
             pthread_t pid;
-            for(; i < mun; i++)
+            for(; i < num; i++)
             {
-                pthread_create(&tid, NULL, HandlerTask, NULL);
+                pthread_create(&pid, NULL, HandlerTask, (void*)this);
             }
         }
-        void PushTask(Task &t)
+        void AddTask(Task &t)
         {
-
+            LockQueue();
+            PushTask(t);
+            UnlockQueue();
+            NotifyThread();
         }
         ~ThreadPool()
         {
-
+            pthread_mutex_destroy(&lock);
+            pthread_cond_destroy(&cond);
         }
-}
+};
 int main()
 {
-    return 0;
+    ThreadPool *tp = new ThreadPool(5);
+    tp->InitThreadPool();
+    int count = 0;
+    for(;;)
+    {
+        int x = count % 1000 + 100;
+        int y = count % 2000 + 300;
+        count++;
+        Task t(x, y);
+        tp->AddTask(t);
+        sleep(1);
+    }
+    delete tp;
 }
