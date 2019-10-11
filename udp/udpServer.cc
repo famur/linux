@@ -49,7 +49,7 @@ int main(int argc, char*argv[])
         if(s > 0)
         {
             buf[s] = 0;
-            std::cout << "client# " << std::endl;
+            std::cout << "client# " << buf << std::endl;
             sendto(sock, buf, strlen(buf), 0, (struct sockaddr*)&peer, len);
         }
     }
