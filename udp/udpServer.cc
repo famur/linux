@@ -7,7 +7,15 @@
 #include<arpa/inet.h>
 #include<cstring>
 #include<stdlib.h>
+#include<unordered_map>
 
+std::unordered_map<std::string, std::string> dict = 
+{
+    {"apple", "苹果" },
+    {"kiwi fruit", "猕猴桃"},
+    {"pear", "梨"},
+    {"banana", "香蕉"}
+};
 void Usage(std::string proc)
 {
     std::cerr << "Usage: "<< proc << " IP PORT" << std::endl;
@@ -50,7 +58,18 @@ int main(int argc, char*argv[])
         {
             buf[s] = 0;
             std::cout << "client# " << buf << std::endl;
-            sendto(sock, buf, strlen(buf), 0, (struct sockaddr*)&peer, len);
+            std::string key = buf;
+            std::string value;
+            auto it = dict.find(key);
+            if(it != dict.end())
+            {
+                value = it->second;
+            }
+            else
+            {
+                value = "Unknow";
+            }
+            sendto(sock, value.c_str(), value.size(), 0, (struct sockaddr*)&peer, len);
         }
     }
 
