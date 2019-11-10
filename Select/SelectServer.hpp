@@ -49,7 +49,7 @@ class SelectServer{
         {
             int fd_array[SIZE];
             int i = 0;
-            for(;i < SIZE; i++)
+            for(; i < SIZE; i++)
             {
                 fd_array[i] = -1;
             }
@@ -62,9 +62,9 @@ class SelectServer{
                 socklen_t len = sizeof(peer);
                 struct timeval timeout = {5, 0};
                 FD_ZERO(&rfds);
-                for(i = 0; i < SIZE; i++)
+                for(i = 0 ; i < SIZE; i++)
                 {
-                    if(fd_array[i] == -1);
+                    if(fd_array[i] == -1)
                     {
                         continue;
                     }
@@ -75,7 +75,7 @@ class SelectServer{
                         max = fd_array[i];
                     }
                 }
-               switch( select(max+1, &rfds, NULL, NULL, NULL)/* &timeout*/)
+               switch(select(max+1, &rfds, nullptr, nullptr, &timeout))
                {
                    case 0:
                        cout << "timeout ... " << endl;
@@ -94,7 +94,8 @@ class SelectServer{
                            {
                                if(fd_array[i] == lsock)
                                {
-                                     int fd = accept(lsock,(struct sockaddr*)&peer,&len);
+                                   cout<<"losck..."<<endl;
+                                     int fd = accept(lsock, (struct sockaddr*)&peer, &len);
                                      if(fd < 0)
                                      {
                                         cerr << "accept error!" << endl;
@@ -112,7 +113,7 @@ class SelectServer{
                                      if(j == SIZE)
                                      {
                                          close(fd);
-                                         cout << "fd array is full" << endl;
+                                         cout << "fd_array is full" << endl;
                                      }
                                      else
                                      {
@@ -121,8 +122,9 @@ class SelectServer{
                                }
                                else
                                {
+                                   cout<<"sock..."<<endl;
                                     char buf[1024];
-                                    ssize_t s = recv(fd_array[i], buf, sizeof(buf), 0);
+                                    ssize_t s = recv(fd_array[i], buf, sizeof(buf)-1, 0);
                                     if(s > 0)
                                     {
                                         buf[s] = 0;

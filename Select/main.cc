@@ -10,4 +10,6 @@ int main(int argc, char *argv[])
     SelectServer *sp = new SelectServer(atoi(argv[1]));
     sp->InitServer();
     sp->Run();
+    delete sp;
+    return 0;
 }
