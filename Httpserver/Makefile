@@ -1,5 +1,5 @@
 server:HttpServer.cc
-	g++ -o #$ $^ -thread
+	g++ -o $@ $^ -std=c++11 -lpthread
 .PHONY:clean
 clean:
 	rm -f server

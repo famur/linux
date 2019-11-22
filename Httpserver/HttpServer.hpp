@@ -26,20 +26,22 @@ class Sock
                 exit(2);
             }
             int opt = 1;
-            setsockopt(sock, SOL_SOCKET, SO_ERUSEADDR, &opt, sizeof(opt));
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
         }
+
         void Bind()
         {
             struct sockaddr_in local;
             local.sin_family = AF_INET;
             local.sin_addr.s_addr = htonl(INADDR_ANY);
             local.sin_port  = htons(port);
-            if(bind(sock, (struct sockaddr*)&yocal, sizeof(local)) < 0)
+            if(bind(sock, (struct sockaddr*)&local, sizeof(local)) < 0)
             {
                 cerr << "Bind error" << endl;
                 exit(3);
             }
         }
+
         int Listen()
         {
             const int backlog = 10;
@@ -49,6 +51,7 @@ class Sock
                 exit(4);
             }
         }
+
         int Accept()
         {
             struct sockaddr_in peer;
@@ -62,6 +65,7 @@ class Sock
             cout << "Get A New Link ... DONE" << endl;
             return fd;
         }
+
         ~Sock()
         {
             if(sock >= 0)
@@ -80,12 +84,14 @@ class HttpServer
     public:
         HttpServer(int port_ = DEFAULT_PORT):sock(port_)
         {}
+
         void InitHttpServer()
         {
             sock.Socket();
             sock.Bind();
             sock.Listen();
         }
+
         void Start()
         {
             for(;;)
@@ -95,7 +101,7 @@ class HttpServer
                 {
                     pthread_t tid;
                     int *p = new int(sock_);
-                    pthread_create(&tid, unllptr, Entry::HandlerRequest, p);
+                    pthread_create(&tid, nullptr, Entry::HandlerRequest, p);
                 }
             }
         }

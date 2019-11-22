@@ -3,11 +3,14 @@
 #include<iostream>
 #include<unistd.h>
 #include<sstream>
+#include<unordered_map>
+#include<vector>
 #include<stdlib.h>
 #include<netinet/in.h>
 #include<arpa/inet.h>
 #include<sys/types.h>
 #include<sys/socket.h>
+#include"Util.hpp"
 
 using namespace std;
 
@@ -22,27 +25,73 @@ class HttpRequest{
         string method;
         string uri;
         string version;
-    public:
-        HttpRequest()
-        {
+        unordered_map<string,string> header_kv;
 
+    public:
+        HttpRequest():request_blank("\n")
+        {
         }
         string &GetRequestLine()
         {
             return request_line;
         }
+
+        string &GetRequestHeader()
+        {
+            return request_header;
+        }
+        string &GetRequestBody()
+        {
+            return request_body;
+        }
         void RequestLineParse()
         {
             stringstream ss(request_line);
             ss >> method >> uri >> version;
+            Util::StringToUpper(method);
             cout << "method : " << method << endl;
             cout << "uri    : " << uri << endl;
             cout << "version: " << version<< endl;
         }
         bool MethodIsLegal()
         {
-
+            if(method != "GET" && method != "POST")
+            {
+                return false;
+            }
+            return true;
         }
+
+        void RequestHeaderParse()
+        {
+            vector<string> v;
+            Util::TansfromToVector(request_header, v);
+            auto it = v.begin();
+
+            for(; it!= v.end(); it++)
+            {
+                string k;
+                string v;
+                Util:: MakeKV(*it, k, v);
+                header_kv.insert(make_pair(k,v));
+            }
+        }
+
+        bool IsNeedRecv()
+        {
+            return method == "POST";
+        }
+
+        int GetContentLength()
+        {
+            auto it = header_kv.find("Content-Length");
+            if(it == header_kv.end())
+            {
+                return -1;
+            }
+            return Util::StringToInt(it->second);
+        }
+
         ~HttpRequest()
         {
 
@@ -56,7 +105,7 @@ class HttpResponse{
         string response_blank;
         string response_body;
     public:
-        HttpResponse()
+        HttpResponse():response_blank("\n")
         {
 
         }
@@ -69,7 +118,8 @@ class EndPoint{
     private:
         int sock;
     public:
-        EndPoint(int sock)
+        EndPoint(int _sock)
+            :sock(_sock)
         {
 
         }
@@ -106,7 +156,7 @@ class EndPoint{
                 }
                 else
                 {
-                    x = '\n'
+                    x = '\n';
                     line.push_back(x);
                 }
             }
@@ -115,6 +165,34 @@ class EndPoint{
         void RecvRequestLine(HttpRequest *rq)
         {
             RecvLine(rq->GetRequestLine());
+        }
+
+        void RecvRequestHeader(HttpRequest *rq)
+        {
+            string &hp = rq->GetRequestHeader();
+            do
+            {
+                string line = "";
+                RecvLine(line);
+                if(line == "\n")
+                {
+                    break;
+                }
+                hp += line;
+            }while(1);
+        }
+        void RecvRequestBody(HttpRequest *rq)
+        {
+            int len = rq->GetContentLength();
+            string &body = rq->GetRequestBody();
+            char c;
+            while(len--)
+            {
+                if(recv(sock, &c, 1, 0) > 0)
+                {
+                    body.push_back(c);
+                }
+            }
         }
         ~EndPoint()
         {
@@ -133,12 +211,18 @@ class Entry
             
             ep->RecvRequestLine(rq);
             rq->RequestLineParse();
-            if(!rq->MethodIsLegal)
+            if(!rq->MethodIsLegal())
             {
-
+                goto end;
             }
-            
+            ep->RecvRequestHeader(rq);
+            rq->RequestHeaderParse();
+            if(rq->IsNeedRecv())
+            {
+                ep->RecvRequestBody(rq);
+            }
 
+end:
             delete ep;
             delete rq;
             delete rsp;
