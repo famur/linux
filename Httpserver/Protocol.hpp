@@ -13,6 +13,7 @@
 #include"Util.hpp"
 
 using namespace std;
+#define WWW "./wwwroot"
 
 class HttpRequest{
     private:
@@ -27,8 +28,13 @@ class HttpRequest{
         string version;
         unordered_map<string,string> header_kv;
 
+        string path;
+        string query_string;
+        bool cgi;
+
+        int recource_size;
     public:
-        HttpRequest():request_blank("\n")
+        HttpRequest():request_blank("\n"),path(WWW),recource_size(0),cgi(false);
         {
         }
         string &GetRequestLine()
@@ -67,13 +73,14 @@ class HttpRequest{
             vector<string> v;
             Util::TansfromToVector(request_header, v);
             auto it = v.begin();
-
-            for(; it!= v.end(); it++)
+            for(; it != v.end(); it++)
             {
                 string k;
                 string v;
-                Util:: MakeKV(*it, k, v);
-                header_kv.insert(make_pair(k,v));
+                Util::MakeKV(*it, k, v);
+                header_kv.insert(make_pair(k, v));
+                cout << "key :" << k << endl;
+                cout << "value :" << v << endl;
             }
         }
 
@@ -92,6 +99,60 @@ class HttpRequest{
             return Util::StringToInt(it->second);
         }
 
+        void UriParse()
+        {
+            if(method == "POST")
+            {
+                cgi = true;
+                path = uri;
+            }
+            else
+            {
+                size_t pos = uri.find("?");
+                if(string::npos == pos)
+                {
+                    path = uri;
+                }
+                else
+                {
+                    cgi = true;
+                    path = uri.substr(0, pos);
+                    query_string = uri.substr(pos + 1);
+                }
+            }
+            if(path[path.size()-1] == '/')
+            {
+                path += "index.html";
+            }
+        }
+        bool IsPathLegal()
+        {
+            struct stat st;
+            if(stat(path.c_str(), &st) == 0)
+            {
+                if(S_IFDIR(st.st_mode))
+                {
+                    path += "/index.html"
+                }
+                else
+                {
+                    if((st.st_mode & S_IXUSR) || (st.st_mode & S_IXGRP) || (st.st_mode & S_IXOTH)) 
+                    {
+                        cgi = true;
+                    }
+                }
+                recource_size = st.st_size;
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+        bool IsCgi()
+        {
+            return cgi;
+        }
         ~HttpRequest()
         {
 
@@ -109,6 +170,10 @@ class HttpResponse{
         {
 
         }
+        void MakeResponse(HttpRequest *rq, int code)
+        {
+            string dec = CodeToDec(code);
+        }
         ~HttpResponse()
         {
         }
@@ -118,8 +183,7 @@ class EndPoint{
     private:
         int sock;
     public:
-        EndPoint(int _sock)
-            :sock(_sock)
+        EndPoint(int _sock):sock(_sock)
         {
 
         }
@@ -149,10 +213,7 @@ class EndPoint{
                             x = '\n';
                         }
                     }
-                    else
-                    {
-                        line.push_back(x);
-                    }
+                    line.push_back(x);
                 }
                 else
                 {
@@ -193,9 +254,11 @@ class EndPoint{
                     body.push_back(c);
                 }
             }
+            cout << "body: " << body << endl;
         }
         ~EndPoint()
         {
+            close(sock);
         }
 };
 class Entry
@@ -203,6 +266,7 @@ class Entry
     public:
         static void *HandlerRequest(void *args)
         {
+            int code = 200;
             int *p = (int*)args;
             int sock = *p;
             EndPoint *ep = new EndPoint(sock);
@@ -222,12 +286,26 @@ class Entry
                 ep->RecvRequestBody(rq);
             }
 
+            rq->UriParse();
+            if(rq->IsPathLegal())
+            {
+                goto end;
+            }
+            
+            if(rq->IsCgi())
+            {
+
+            }
+            else
+            {
+                rsp->MakeResponse(rq, code);
+                ep->SendResponse(rsp);
+            }
 end:
             delete ep;
             delete rq;
             delete rsp;
             delete p;
-
         }
 
 };
