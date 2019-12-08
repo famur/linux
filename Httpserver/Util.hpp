@@ -50,4 +50,52 @@ class Util{
             ss >> result;
             return result;
         }
+        static std::string IntToString(int x)
+        {
+            std::stringstream ss;
+            ss << x;
+            std::string s = ss.str();
+            return s;
+        }
+        static std::string CodeToDec(int code)
+        {
+            switch(code)
+            {
+                case 200:
+                    return "OK";
+                case 404:
+                    return "NOT FOUND";
+                default:
+                    return "UNKNOW!";
+            }
+        }
+        static std::string SuffixToType(const std::string &suffix)
+        {
+            std::string ct = "Content-Type: ";
+            if(suffix == ".html")
+            {
+                ct += "text/html";
+            }
+            else if(suffix == ".css")
+            {
+                ct += "text/css";
+            }
+            else if(suffix == ".js")
+            {
+                ct += "application/x-javascript";
+            }
+            else if(suffix == ".jpg")
+            {
+                ct += "image/jpeg";
+            }
+            else if(suffix == ".png")
+            {
+                ct += "image/png";
+            }
+            else
+            {
+                ct += "text/css";
+            }
+            return ct;
+        }
 };

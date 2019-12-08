@@ -2,14 +2,19 @@
 
 #include<iostream>
 #include<unistd.h>
+#include<string>
 #include<sstream>
 #include<unordered_map>
 #include<vector>
 #include<stdlib.h>
 #include<netinet/in.h>
 #include<arpa/inet.h>
+#include<sys/stat.h>
+#include<utility>
 #include<sys/types.h>
 #include<sys/socket.h>
+#include<sys/sendfile.h>
+#include<fcntl.h>
 #include"Util.hpp"
 
 using namespace std;
@@ -33,8 +38,9 @@ class HttpRequest{
         bool cgi;
 
         int recource_size;
+        string suffix;
     public:
-        HttpRequest():request_blank("\n"),path(WWW),recource_size(0),cgi(false);
+        HttpRequest():request_blank("\n"),path(WWW),recource_size(0),cgi(false)
         {
         }
         string &GetRequestLine()
@@ -49,6 +55,18 @@ class HttpRequest{
         string &GetRequestBody()
         {
             return request_body;
+        }
+        string &GetPath()
+        {
+            return path;
+        }
+        int GetRecourceSize()
+        {
+            return recource_size;
+        }
+        string GetSuffix()
+        {
+            return suffix;
         }
         void RequestLineParse()
         {
@@ -79,8 +97,8 @@ class HttpRequest{
                 string v;
                 Util::MakeKV(*it, k, v);
                 header_kv.insert(make_pair(k, v));
-                cout << "key :" << k << endl;
-                cout << "value :" << v << endl;
+                //cout << "key :" << k << endl;
+                //cout << "value :" << v << endl;
             }
         }
 
@@ -104,19 +122,19 @@ class HttpRequest{
             if(method == "POST")
             {
                 cgi = true;
-                path = uri;
+                path += uri;
             }
             else
             {
                 size_t pos = uri.find("?");
                 if(string::npos == pos)
                 {
-                    path = uri;
+                    path += uri;
                 }
                 else
                 {
                     cgi = true;
-                    path = uri.substr(0, pos);
+                    path += uri.substr(0, pos);
                     query_string = uri.substr(pos + 1);
                 }
             }
@@ -124,15 +142,24 @@ class HttpRequest{
             {
                 path += "index.html";
             }
+            size_t pos = path.rfind(".");
+            if(string::npos == pos)
+            {
+                suffix = ".html";
+            }
+            else
+            {
+                suffix = path.substr(pos);
+            }
         }
         bool IsPathLegal()
         {
             struct stat st;
             if(stat(path.c_str(), &st) == 0)
             {
-                if(S_IFDIR(st.st_mode))
+                if(st.st_mode & S_IFDIR)
                 {
-                    path += "/index.html"
+                    path += "/index.html";
                 }
                 else
                 {
@@ -165,17 +192,77 @@ class HttpResponse{
         string response_header;
         string response_blank;
         string response_body;
+
+    private:
+        int fd;
+        int size;
     public:
-        HttpResponse():response_blank("\n")
+        HttpResponse():response_blank("\r\n"),fd(-1)
         {
 
         }
+        void MakeResponseLine(int code)
+        {
+            response_line = "HTTP/1.0";
+            response_line += " ";
+            response_line += Util::IntToString(code);
+            response_line += " ";
+            response_line += Util::CodeToDec(code);
+            response_line += "\r\n";
+        }
+        void MakeResponseHeader(vector<string> &v)
+        {
+            auto it = v.begin();
+            for(; it != v.end(); it++)
+            {
+                response_header += *it;
+                response_header += "\r\n";
+            }
+        }
+        void MakeResponseBody();
         void MakeResponse(HttpRequest *rq, int code)
         {
-            string dec = CodeToDec(code);
+            MakeResponseLine(code);
+            string suffix = rq->GetSuffix();
+            size = rq->GetRecourceSize();
+            vector<string> v;
+            string s = Util::SuffixToType(suffix);
+            v.push_back(s);
+            string ct = "Content-Length: ";
+            ct += Util::IntToString(size);
+            v.push_back(ct); 
+            MakeResponseHeader(v);
+            string path = rq->GetPath();
+            fd = open(path.c_str(), O_RDONLY);
+            //MakeResponseBody();
         }
+        string &GetResponseLine()
+        {
+            return response_line;
+        }
+        string &GetResponseHeader()
+        {
+            return response_header;
+        }
+        string &GetResponseBlank()
+        {
+            return response_blank;
+        }
+        int GetFd()
+        {
+            return fd;
+        }
+        int GetRecourceSize()
+        {
+            return size;
+        }
+
         ~HttpResponse()
         {
+            if(fd != -1)
+            {
+                close(fd);
+            }
         }
 };
 
@@ -256,6 +343,26 @@ class EndPoint{
             }
             cout << "body: " << body << endl;
         }
+        void SendResponse(HttpResponse *rsp, bool cgi)
+        {
+            if(cgi)
+            {
+
+            }
+            else
+            {
+                string &response_line = rsp->GetResponseLine();
+                string &response_header = rsp->GetResponseHeader();
+                string &response_blank = rsp->GetResponseBlank();
+                int fd = rsp->GetFd();
+                int size = rsp->GetRecourceSize();
+
+                send(sock, response_line.c_str(), response_line.size(), 0);
+                send(sock, response_header.c_str(), response_header.size(), 0);
+                send(sock, response_blank.c_str(), response_blank.size(), 0);
+                sendfile(sock, fd, NULL, size);
+            }
+        }
         ~EndPoint()
         {
             close(sock);
@@ -264,6 +371,11 @@ class EndPoint{
 class Entry
 {
     public:
+
+        static void ProcessCgi(HttpRequest*rq, HttpResponse*rsp, EndPoint* ep)
+        {
+
+        }
         static void *HandlerRequest(void *args)
         {
             int code = 200;
@@ -277,6 +389,7 @@ class Entry
             rq->RequestLineParse();
             if(!rq->MethodIsLegal())
             {
+                code = 404;
                 goto end;
             }
             ep->RecvRequestHeader(rq);
@@ -287,19 +400,19 @@ class Entry
             }
 
             rq->UriParse();
-            if(rq->IsPathLegal())
+            if(!rq->IsPathLegal())
             {
+                //code = 404;
                 goto end;
             }
-            
             if(rq->IsCgi())
             {
-
+                ProcessCgi(rq, rsp, ep);
             }
             else
-            {
+            {   
                 rsp->MakeResponse(rq, code);
-                ep->SendResponse(rsp);
+                ep->SendResponse(rsp, false);
             }
 end:
             delete ep;
