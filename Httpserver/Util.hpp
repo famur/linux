@@ -3,6 +3,7 @@
 #include<iostream>
 #include<algorithm>
 #include<string>
+#include<vector>
 #include<sstream>
 #include<sstream>
 #include<sstream>
@@ -18,7 +19,7 @@ class Util{
         {
             std::transform(s.begin(), s.end(), s.begin(), ::tolower);
         }
-        static void TansfromToVector(std::string &s, std::vector<std::string> &v)
+        static void TansfromToVector(std::string &s,std::vector<std::string> &v)
         {
             size_t start = 0;
             while(1)

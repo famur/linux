@@ -14,6 +14,7 @@
 #include<sys/types.h>
 #include<sys/socket.h>
 #include<sys/sendfile.h>
+#include<sys/wait.h>
 #include<fcntl.h>
 #include"Util.hpp"
 
@@ -67,6 +68,14 @@ class HttpRequest{
         string GetSuffix()
         {
             return suffix;
+        }
+        string &GetMethod()
+        {
+            return method;
+        }
+        string &GetQueryString()
+        {
+            return query_string;
         }
         void RequestLineParse()
         {
@@ -219,22 +228,33 @@ class HttpResponse{
                 response_header += "\r\n";
             }
         }
-        void MakeResponseBody();
-        void MakeResponse(HttpRequest *rq, int code)
+        void MakeResponse(HttpRequest *rq, int code, bool cgi)
         {
             MakeResponseLine(code);
-            string suffix = rq->GetSuffix();
-            size = rq->GetRecourceSize();
             vector<string> v;
-            string s = Util::SuffixToType(suffix);
-            v.push_back(s);
-            string ct = "Content-Length: ";
-            ct += Util::IntToString(size);
-            v.push_back(ct); 
-            MakeResponseHeader(v);
-            string path = rq->GetPath();
-            fd = open(path.c_str(), O_RDONLY);
-            //MakeResponseBody();
+            if(cgi)
+            {
+                string ct = Util::SuffixToType("");
+                v.push_back(ct);
+                string cl = "Content-Length: ";
+                cl += Util::IntToString(response_body.size());
+                v.push_back(cl);
+                MakeResponseHeader(v);
+            }
+            else
+            {
+                string suffix = rq->GetSuffix();
+                size = rq->GetRecourceSize();
+                vector<string> v;
+                string s = Util::SuffixToType(suffix);
+                v.push_back(s);
+                string ct = "Content-Length: ";
+                ct += Util::IntToString(size);
+                v.push_back(ct); 
+                MakeResponseHeader(v);
+                string path = rq->GetPath();
+                fd = open(path.c_str(), O_RDONLY);
+            }
         }
         string &GetResponseLine()
         {
@@ -247,6 +267,10 @@ class HttpResponse{
         string &GetResponseBlank()
         {
             return response_blank;
+        }
+        string &GetResponseBody()
+        {
+            return response_body;
         }
         int GetFd()
         {
@@ -345,21 +369,24 @@ class EndPoint{
         }
         void SendResponse(HttpResponse *rsp, bool cgi)
         {
+            string &response_line = rsp->GetResponseLine();
+            string &response_header = rsp->GetResponseHeader();
+            string &response_blank = rsp->GetResponseBlank();
+
+            send(sock, response_line.c_str(), response_line.size(), 0);
+            send(sock, response_header.c_str(), response_header.size(), 0);
+            send(sock, response_blank.c_str(), response_blank.size(), 0);
+            int fd = rsp->GetFd();
             if(cgi)
             {
-
+                string &response_body = rsp->GetResponseBody();
+                send(sock, response_body.c_str(), response_body.size(), 0);
             }
             else
             {
-                string &response_line = rsp->GetResponseLine();
-                string &response_header = rsp->GetResponseHeader();
-                string &response_blank = rsp->GetResponseBlank();
                 int fd = rsp->GetFd();
                 int size = rsp->GetRecourceSize();
 
-                send(sock, response_line.c_str(), response_line.size(), 0);
-                send(sock, response_header.c_str(), response_header.size(), 0);
-                send(sock, response_blank.c_str(), response_blank.size(), 0);
                 sendfile(sock, fd, NULL, size);
             }
         }
@@ -372,10 +399,82 @@ class Entry
 {
     public:
 
-        static void ProcessCgi(HttpRequest*rq, HttpResponse*rsp, EndPoint* ep)
+        static int ProcessCgi(HttpRequest*rq, HttpResponse*rsp)
         {
+            int code = 200;
+            string path = rq->GetPath();
+            string &body = rq->GetRequestBody();
+            string &method = rq->GetMethod();
+            string &query_string = rq->GetQueryString();
+            int content_length = rq->GetContentLength();
+            string cont_len_env = "CONTENT_LENGTH=";
+            string method_env = "METHOD=";
+            method_env += method;
+            string query_string_env = "QUERY_STRING=";
+            query_string_env += query_string;
 
+            string &rsp_body = rsp->GetResponseBody();
+            int input[2] = {0};
+            int output[2] ={0};
+
+            pipe(input);
+            pipe(output);
+
+            pid_t id = fork();
+            if(id < 0)
+            {
+                code = 404;
+            }
+            else if(id == 0)
+            {
+                close(input[1]);
+                close(output[0]);
+                
+                dup2(input[0], 0);
+                dup2(output[1], 1);
+                putenv((char*)method_env.c_str());
+                if(method == "POST")
+                {
+                    cont_len_env += Util::IntToString(content_length);
+                    putenv((char*)cont_len_env.c_str());
+                }
+                else if(method == "GET")
+                {
+                    putenv((char*)query_string_env.c_str());
+                }
+                else
+                {
+                    
+                }
+                execl(path.c_str(), path.c_str(), nullptr);
+                exit(1);
+            }
+            else
+            {
+                close(input[0]);
+                close(output[1]);
+                if(method == "post")
+                {
+                    auto it = body.begin();
+                    for(; it != body.end(); it++)
+                    {
+                        char c = *it;
+                        write(input[1], &c, 1);
+                    }
+                }
+            }
+            char c;
+            while(read(output[0], &c, 1) > 0)
+            {
+                rsp_body.push_back(c);
+            }
+            waitpid(id, NULL, 0);
+            return code;
         }
+        //static void Port(int *port)
+        //{
+            //cout << "33333" << endl;
+        //}
         static void *HandlerRequest(void *args)
         {
             int code = 200;
@@ -402,16 +501,18 @@ class Entry
             rq->UriParse();
             if(!rq->IsPathLegal())
             {
-                //code = 404;
+                code = 404;
                 goto end;
             }
             if(rq->IsCgi())
             {
-                ProcessCgi(rq, rsp, ep);
+                code = ProcessCgi(rq, rsp);
+                rsp->MakeResponse(rq, code, true);
+                ep->SendResponse(rsp, true);
             }
             else
             {   
-                rsp->MakeResponse(rq, code);
+                rsp->MakeResponse(rq, code, false);
                 ep->SendResponse(rsp, false);
             }
 end:

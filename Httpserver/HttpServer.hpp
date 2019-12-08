@@ -81,6 +81,7 @@ class HttpServer
 {
     private:
          Sock sock;
+         
     public:
         HttpServer(int port_ = DEFAULT_PORT):sock(port_)
         {}
@@ -102,6 +103,7 @@ class HttpServer
                     pthread_t tid;
                     int *p = new int(sock_);
                     pthread_create(&tid, nullptr, Entry::HandlerRequest, p);
+                    //Entry::Port(port_);
                 }
             }
         }
