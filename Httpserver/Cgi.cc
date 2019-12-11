@@ -38,9 +38,8 @@ int main()
     }
     else
     {
-
+        cout << "55555" << endl;
     }
-
     size_t pos = args.find('&');
     if(string::npos != pos)
     {

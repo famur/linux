@@ -19,7 +19,7 @@
 #include"Util.hpp"
 
 using namespace std;
-#define WWW "./wwwroot"
+#define WWW "./wwwroot2"
 
 class HttpRequest{
     private:
@@ -166,7 +166,7 @@ class HttpRequest{
             struct stat st;
             if(stat(path.c_str(), &st) == 0)
             {
-                if(st.st_mode & S_IFDIR)
+                if(S_ISDIR(st.st_mode))
                 {
                     path += "/index.html";
                 }
@@ -453,7 +453,7 @@ class Entry
             {
                 close(input[0]);
                 close(output[1]);
-                if(method == "post")
+                if(method == "POST")
                 {
                     auto it = body.begin();
                     for(; it != body.end(); it++)
@@ -462,19 +462,15 @@ class Entry
                         write(input[1], &c, 1);
                     }
                 }
+                char c;
+                while(read(output[0], &c, 1) > 0)
+                {
+                    rsp_body.push_back(c);
+                }
+                waitpid(id, NULL, 0);
             }
-            char c;
-            while(read(output[0], &c, 1) > 0)
-            {
-                rsp_body.push_back(c);
-            }
-            waitpid(id, NULL, 0);
             return code;
         }
-        //static void Port(int *port)
-        //{
-            //cout << "33333" << endl;
-        //}
         static void *HandlerRequest(void *args)
         {
             int code = 200;
@@ -488,7 +484,7 @@ class Entry
             rq->RequestLineParse();
             if(!rq->MethodIsLegal())
             {
-                code = 404;
+                code = 400;
                 goto end;
             }
             ep->RecvRequestHeader(rq);
@@ -511,7 +507,7 @@ class Entry
                 ep->SendResponse(rsp, true);
             }
             else
-            {   
+            {
                 rsp->MakeResponse(rq, code, false);
                 ep->SendResponse(rsp, false);
             }
