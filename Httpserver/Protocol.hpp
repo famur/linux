@@ -40,9 +40,19 @@ class HttpRequest{
 
         int recource_size;
         string suffix;
+
+        bool done;
     public:
-        HttpRequest():request_blank("\n"),path(WWW),recource_size(0),cgi(false)
+        HttpRequest():request_blank("\n"),path(WWW),recource_size(0),cgi(false),done(false),suffix(".html")
         {
+        }
+        bool GetDone()
+        {
+            return done;
+        }
+        void SetDone(bool _done)
+        {
+            done = _done;
         }
         string &GetRequestLine()
         {
@@ -82,9 +92,9 @@ class HttpRequest{
             stringstream ss(request_line);
             ss >> method >> uri >> version;
             Util::StringToUpper(method);
-            cout << "method : " << method << endl;
-            cout << "uri    : " << uri << endl;
-            cout << "version: " << version<< endl;
+            //cout << "method : " << method << endl;
+            //cout << "uri    : " << uri << endl;
+            //cout << "version: " << version<< endl;
         }
         bool MethodIsLegal()
         {
@@ -160,6 +170,7 @@ class HttpRequest{
             {
                 suffix = path.substr(pos);
             }
+            cout << "path :" << path << endl;
         }
         bool IsPathLegal()
         {
@@ -188,6 +199,25 @@ class HttpRequest{
         bool IsCgi()
         {
             return cgi;
+        }
+        void Make_404()
+        {
+            suffix = ".html";
+            path = "wwwroot2/404.html";
+            struct stat st;
+            stat(path.c_str(), &st);
+            recource_size = st.st_size;
+        }
+        void ReMakeRequest(int code) 
+        {
+            switch(code)
+            {
+                case 404:
+                    Make_404();
+                    break;
+                default:
+                    break;
+            }
         }
         ~HttpRequest()
         {
@@ -245,7 +275,6 @@ class HttpResponse{
             {
                 string suffix = rq->GetSuffix();
                 size = rq->GetRecourceSize();
-                vector<string> v;
                 string s = Util::SuffixToType(suffix);
                 v.push_back(s);
                 string ct = "Content-Length: ";
@@ -390,6 +419,23 @@ class EndPoint{
                 sendfile(sock, fd, NULL, size);
             }
         }
+
+        void ClearRequest(HttpRequest *rq)
+        {
+            if(rq->GetDone())
+            {
+                return;
+            }
+            if(rq->GetRequestHeader().empty())
+            {
+                RecvRequestHeader(rq);
+            }
+            if(rq->IsNeedRecv())
+            {
+                RecvRequestBody(rq);
+            }
+            rq->SetDone(true);
+        }
         ~EndPoint()
         {
             close(sock);
@@ -493,6 +539,7 @@ class Entry
             {
                 ep->RecvRequestBody(rq);
             }
+            rq->SetDone(true);
 
             rq->UriParse();
             if(!rq->IsPathLegal())
@@ -503,8 +550,11 @@ class Entry
             if(rq->IsCgi())
             {
                 code = ProcessCgi(rq, rsp);
-                rsp->MakeResponse(rq, code, true);
-                ep->SendResponse(rsp, true);
+                if(code == 200)
+                {
+                    rsp->MakeResponse(rq, code, true);
+                    ep->SendResponse(rsp, true);
+                }
             }
             else
             {
@@ -512,6 +562,14 @@ class Entry
                 ep->SendResponse(rsp, false);
             }
 end:
+            if(code != 200)
+            {
+                ep->ClearRequest(rq);
+                rq->ReMakeRequest(code);
+                rsp->MakeResponse(rq, code, false);
+                ep->SendResponse(rsp, false);
+
+            }
             delete ep;
             delete rq;
             delete rsp;

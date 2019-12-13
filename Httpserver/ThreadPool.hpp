@@ -1,0 +1,97 @@
+#pragma once
+#include<iostream>
+#include<queue>
+#include<pthread.h>
+
+using namespace std;
+
+typedef void*(*handler_t)(void*);
+
+class Task{
+    private:
+        int *sock_p;
+        handler_t handler;
+    public:
+        Task():sock_p(nullptr),handler(nullptr)
+    {
+
+    }
+        Task(int*sock_p_, handler_t h_):sock_p
+};
+
+class ThreadPool{
+    private:
+        int num;
+        queue<task> q;
+        pthread_mutex_t lock;
+        pthread_cont_t cond;
+    public:
+
+        ThreadPool(int num_=10):num(num_)
+        {
+            pthread_mutex_init(&lock);
+            pthread_cond_init(&cond);
+        }
+        void LockQueue()
+        {
+            pthread_mutex_lock(&lock);
+        }
+        void UnLockQueue()
+        {
+            pthread_mutex_unlock(&lock);
+        }
+        bool HasTask()
+        {
+            return q.size() == 0 ? false : true;
+        }
+        void ThreadWait()
+        {
+            pthread_cond_wait(&cond, &lock);
+
+        }
+        void ThreadWakeUp()
+        {
+            pthread_cond_signal(&cond);
+        }
+        Task PopTask()
+        {
+            Task t = q.front();
+            q.pop();
+            return t;
+        }
+        static void *ThreadRoutine(void *arg)
+        {
+            ThreadPool *tp = (ThreadPool*)arg;
+            while(true)
+            {
+                tp->LockQueue();
+                while(!tp->HasTask())
+                {
+                    tp->ThreadWait();
+                }
+                Task t = tp->PopTask();
+                tp->UnLockQueue();
+                t.Run();
+            }
+        }
+        void InitThreadPool()
+        {
+            pthread_t id;
+            for(auto i = 0; i < num; i++)
+            {
+                pathread_create(&id, nullptr, ThreadRoutine, nullptr);
+            }
+        }
+        void PushTask(const Task &t)
+        {
+            LockQueue();
+            q.push(t);
+            UnlockQueue();
+            ThreadWakeUp();
+        }
+        ~ThreadPool()
+        {
+            pthread_mutex_destroy(&lock);
+            pthread_cond_destroy(&cond);
+        }
+};
