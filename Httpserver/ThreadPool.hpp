@@ -13,24 +13,31 @@ class Task{
         handler_t handler;
     public:
         Task():sock_p(nullptr),handler(nullptr)
-    {
+        {
 
-    }
-        Task(int*sock_p_, handler_t h_):sock_p
+        }
+        Task(int*sock_p_, handler_t h_):sock_p(sock_p_),handler(h_)
+        {
+        
+        }
+        void Run()
+        {
+            handler(sock_p);
+        }
 };
 
 class ThreadPool{
     private:
         int num;
-        queue<task> q;
+        queue<Task> q;
         pthread_mutex_t lock;
-        pthread_cont_t cond;
+        pthread_cond_t cond;
     public:
 
         ThreadPool(int num_=10):num(num_)
         {
-            pthread_mutex_init(&lock);
-            pthread_cond_init(&cond);
+            pthread_mutex_init(&lock, nullptr);
+            pthread_cond_init(&cond, nullptr);
         }
         void LockQueue()
         {
@@ -79,14 +86,14 @@ class ThreadPool{
             pthread_t id;
             for(auto i = 0; i < num; i++)
             {
-                pathread_create(&id, nullptr, ThreadRoutine, nullptr);
+                pthread_create(&id, nullptr, ThreadRoutine, this);
             }
         }
         void PushTask(const Task &t)
         {
             LockQueue();
             q.push(t);
-            UnlockQueue();
+            UnLockQueue();
             ThreadWakeUp();
         }
         ~ThreadPool()

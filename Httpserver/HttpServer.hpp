@@ -4,6 +4,7 @@
 #include<pthread.h>
 #include"Util.hpp"
 #include"Protocol.hpp"
+#include"ThreadPool.hpp"
 
 using namespace std;
 
@@ -81,9 +82,9 @@ class HttpServer
 {
     private:
          Sock sock;
-         
+         ThreadPool *tp;          
     public:
-        HttpServer(int port_ = DEFAULT_PORT):sock(port_)
+        HttpServer(int port_ = DEFAULT_PORT):sock(port_),tp(nullptr)
         {}
 
         void InitHttpServer()
@@ -91,6 +92,8 @@ class HttpServer
             sock.Socket();
             sock.Bind();
             sock.Listen();
+            tp = new ThreadPool(8);
+            tp->InitThreadPool();
         }
 
         void Start()
@@ -102,7 +105,9 @@ class HttpServer
                 {
                     pthread_t tid;
                     int *p = new int(sock_);
-                    pthread_create(&tid, nullptr, Entry::HandlerRequest, p);
+                    Task t(p, Entry::HandlerRequest);
+                    tp->PushTask(t);
+                    //pthread_create(&tid, nullptr, Entry::HandlerRequest, p);
                     //Entry::Port(port_);
                 }
             }

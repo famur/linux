@@ -49,9 +49,12 @@ int main()
         int data1 = GetData(first);
         int data2 = GetData(second);
         cout << data1 << "+" << data2 << "="<<data1 + data2 << endl;
+        cout << data1 << "-" << data2 << "="<<data1 - data2 << endl;
+        cout << data1 << "*" << data2 << "="<<data1 * data2 << endl;
+        cout << data1 << "/" << data2 << "="<<data1 / data2 << endl;
     }
 
-    cout << "method: " << method << endl;
-    cout << "args: " << args << endl;
+    //cout << "method: " << method << endl;
+    //cout << "args: " << args << endl;
     return 0;
 }
